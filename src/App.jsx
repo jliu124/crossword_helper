@@ -16,6 +16,7 @@ function App() {
   const [grid, setGrid] = useState(null);
   const [placements, setPlacements] = useState([]);
   const [words, setWords] = useState([]);
+  const [displayNames, setDisplayNames] = useState({}); // Maps processed word -> original with spaces
   const [cellNumbers, setCellNumbers] = useState([]);
   const [acrossWords, setAcrossWords] = useState([]);
   const [downWords, setDownWords] = useState([]);
@@ -31,12 +32,13 @@ function App() {
   const gridRef = useRef(null);
 
   // Generate crossword
-  const handleGenerate = (inputWords) => {
+  const handleGenerate = (inputWords, inputDisplayNames) => {
     const result = generateCrossword(inputWords, gridWidth, gridHeight);
 
     setGrid(result.grid);
     setPlacements(result.placements);
     setWords(inputWords);
+    setDisplayNames(inputDisplayNames || {});
     setUnplacedWords(result.unplacedWords);
 
     // Generate numbering
@@ -85,6 +87,7 @@ function App() {
     setGridWidth(data.gridWidth);
     setGridHeight(data.gridHeight);
     setWords(data.words);
+    setDisplayNames(data.displayNames || {});
     setPlacements(data.placements);
     setClues(data.clues || { across: {}, down: {} });
 
@@ -105,6 +108,7 @@ function App() {
     setGrid(null);
     setPlacements([]);
     setWords([]);
+    setDisplayNames({});
     setCellNumbers([]);
     setAcrossWords([]);
     setDownWords([]);
@@ -143,6 +147,7 @@ function App() {
             gridWidth={gridWidth}
             gridHeight={gridHeight}
             words={words}
+            displayNames={displayNames}
             placements={placements}
             clues={clues}
             acrossWords={acrossWords}
@@ -185,6 +190,7 @@ function App() {
             acrossWords={acrossWords}
             downWords={downWords}
             clues={clues}
+            displayNames={displayNames}
             onClueChange={handleClueChange}
           />
         </div>

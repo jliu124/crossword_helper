@@ -2,10 +2,9 @@
  * Crossword Generator Algorithm
  *
  * Approach:
- * 1. Sort words by length (longest first - they constrain the grid most)
- * 2. Place the first word horizontally, centered
- * 3. For each remaining word, find valid intersections and choose the best
- * 4. If a word can't be placed, skip it and report to user
+ * 1. Try multiple placement strategies
+ * 2. For each strategy, place words and track success
+ * 3. Return the result that places the most words
  */
 
 /**
@@ -45,8 +44,6 @@ function isValidPlacement(grid, word, row, col, isHorizontal) {
     if (row + word.length < height && grid[row + word.length][col] !== null) return false;
   }
 
-  let hasIntersection = false;
-
   for (let i = 0; i < word.length; i++) {
     const r = isHorizontal ? row : row + i;
     const c = isHorizontal ? col + i : col;
@@ -58,7 +55,6 @@ function isValidPlacement(grid, word, row, col, isHorizontal) {
       if (currentCell !== word[i]) {
         return false;
       }
-      hasIntersection = true;
     } else {
       // Cell is empty - check for adjacent parallel words
       if (isHorizontal) {
@@ -100,17 +96,25 @@ function placeWord(grid, word, row, col, isHorizontal) {
 /**
  * Finds all valid placements for a word on the grid
  */
-function findValidPlacements(grid, word, placements) {
+function findValidPlacements(grid, word, placements, isFirstWord = false, firstWordHorizontal = true) {
   const validPlacements = [];
   const width = grid[0].length;
   const height = grid.length;
 
-  // If this is the first word, place it horizontally centered
-  if (placements.length === 0) {
-    const row = Math.floor(height / 2);
-    const col = Math.floor((width - word.length) / 2);
-    if (isValidPlacement(grid, word, row, col, true)) {
-      validPlacements.push({ row, col, isHorizontal: true, intersections: 0 });
+  // If this is the first word, place it centered
+  if (isFirstWord) {
+    if (firstWordHorizontal) {
+      const row = Math.floor(height / 2);
+      const col = Math.floor((width - word.length) / 2);
+      if (isValidPlacement(grid, word, row, col, true)) {
+        validPlacements.push({ row, col, isHorizontal: true, intersections: 0, distanceFromCenter: 0 });
+      }
+    } else {
+      const row = Math.floor((height - word.length) / 2);
+      const col = Math.floor(width / 2);
+      if (isValidPlacement(grid, word, row, col, false)) {
+        validPlacements.push({ row, col, isHorizontal: false, intersections: 0, distanceFromCenter: 0 });
+      }
     }
     return validPlacements;
   }
@@ -154,13 +158,17 @@ function findValidPlacements(grid, word, placements) {
             const wordCenterCol = isHorizontal ? col + word.length / 2 : col;
             const distanceFromCenter = Math.abs(wordCenterRow - centerRow) + Math.abs(wordCenterCol - centerCol);
 
-            validPlacements.push({
-              row,
-              col,
-              isHorizontal,
-              intersections,
-              distanceFromCenter
-            });
+            // Avoid duplicate placements
+            const key = `${row},${col},${isHorizontal}`;
+            if (!validPlacements.some(p => `${p.row},${p.col},${p.isHorizontal}` === key)) {
+              validPlacements.push({
+                row,
+                col,
+                isHorizontal,
+                intersections,
+                distanceFromCenter
+              });
+            }
           }
         }
       }
@@ -179,26 +187,18 @@ function scorePlacement(placement) {
 }
 
 /**
- * Generates a crossword from a list of words
- * @param {string[]} words - List of words to place
- * @param {number} width - Grid width
- * @param {number} height - Grid height
- * @returns {Object} - { grid, placements, unplacedWords }
+ * Attempts to place words with a given ordering and first word orientation
  */
-export function generateCrossword(words, width, height) {
-  // Clean and sort words by length (longest first)
-  const sortedWords = [...words]
-    .map(w => w.toUpperCase().trim())
-    .filter(w => w.length > 0)
-    .sort((a, b) => b.length - a.length);
-
+function attemptPlacement(words, width, height, firstWordHorizontal) {
   let grid = createEmptyGrid(width, height);
   const placements = [];
   let unplacedWords = [];
 
   // First pass: try to place all words in order
-  for (const word of sortedWords) {
-    const validPlacements = findValidPlacements(grid, word, placements);
+  for (let i = 0; i < words.length; i++) {
+    const word = words[i];
+    const isFirstWord = placements.length === 0;
+    const validPlacements = findValidPlacements(grid, word, placements, isFirstWord, firstWordHorizontal);
 
     if (validPlacements.length === 0) {
       unplacedWords.push(word);
@@ -218,8 +218,7 @@ export function generateCrossword(words, width, height) {
     });
   }
 
-  // Additional passes: retry unplaced words since more words are now on the grid
-  // Keep trying until no more words can be placed
+  // Additional passes: retry unplaced words
   let madeProgress = true;
   while (madeProgress && unplacedWords.length > 0) {
     madeProgress = false;
@@ -233,7 +232,6 @@ export function generateCrossword(words, width, height) {
         continue;
       }
 
-      // Sort by score and pick the best
       validPlacements.sort((a, b) => scorePlacement(b) - scorePlacement(a));
       const best = validPlacements[0];
 
@@ -251,6 +249,96 @@ export function generateCrossword(words, width, height) {
   }
 
   return { grid, placements, unplacedWords };
+}
+
+/**
+ * Shuffles an array (Fisher-Yates)
+ */
+function shuffle(array) {
+  const result = [...array];
+  for (let i = result.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [result[i], result[j]] = [result[j], result[i]];
+  }
+  return result;
+}
+
+/**
+ * Generates a crossword from a list of words
+ * @param {string[]} words - List of words to place
+ * @param {number} width - Grid width
+ * @param {number} height - Grid height
+ * @returns {Object} - { grid, placements, unplacedWords }
+ */
+export function generateCrossword(words, width, height) {
+  // Clean words
+  const cleanedWords = [...words]
+    .map(w => w.toUpperCase().trim())
+    .filter(w => w.length > 0);
+
+  // Sort by length (longest first) as primary ordering
+  const sortedByLength = [...cleanedWords].sort((a, b) => b.length - a.length);
+
+  let bestResult = null;
+
+  // Strategy 1: Longest first, horizontal start
+  const result1 = attemptPlacement(sortedByLength, width, height, true);
+  if (!bestResult || result1.placements.length > bestResult.placements.length) {
+    bestResult = result1;
+  }
+
+  // If all words placed, return early
+  if (bestResult.unplacedWords.length === 0) {
+    return bestResult;
+  }
+
+  // Strategy 2: Longest first, vertical start
+  const result2 = attemptPlacement(sortedByLength, width, height, false);
+  if (result2.placements.length > bestResult.placements.length) {
+    bestResult = result2;
+  }
+
+  if (bestResult.unplacedWords.length === 0) {
+    return bestResult;
+  }
+
+  // Strategy 3-6: Try different orderings with shuffled words
+  // Put shorter words first sometimes - they have more flexibility
+  const sortedByLengthAsc = [...cleanedWords].sort((a, b) => a.length - b.length);
+
+  const result3 = attemptPlacement(sortedByLengthAsc, width, height, true);
+  if (result3.placements.length > bestResult.placements.length) {
+    bestResult = result3;
+  }
+
+  const result4 = attemptPlacement(sortedByLengthAsc, width, height, false);
+  if (result4.placements.length > bestResult.placements.length) {
+    bestResult = result4;
+  }
+
+  // Strategy 5-8: Random shuffles
+  for (let i = 0; i < 4; i++) {
+    const shuffled = shuffle(cleanedWords);
+    const resultH = attemptPlacement(shuffled, width, height, true);
+    if (resultH.placements.length > bestResult.placements.length) {
+      bestResult = resultH;
+    }
+
+    if (bestResult.unplacedWords.length === 0) {
+      return bestResult;
+    }
+
+    const resultV = attemptPlacement(shuffled, width, height, false);
+    if (resultV.placements.length > bestResult.placements.length) {
+      bestResult = resultV;
+    }
+
+    if (bestResult.unplacedWords.length === 0) {
+      return bestResult;
+    }
+  }
+
+  return bestResult;
 }
 
 export default generateCrossword;

@@ -10,19 +10,29 @@ function WordInput({ onGenerate, disabled }) {
   const [error, setError] = useState('');
 
   const validateAndParse = () => {
-    const lines = text.split('\n').map(line => line.trim().toUpperCase()).filter(line => line.length > 0);
+    const rawLines = text.split('\n')
+      .map(line => line.trim().toUpperCase())
+      .filter(line => line.length > 0);
 
-    // Check for non-letter characters
-    for (const word of lines) {
-      if (!/^[A-Z]+$/.test(word)) {
-        setError(`Invalid word "${word}": only letters A-Z are allowed`);
+    const processedWords = [];
+    const displayNames = {}; // Maps processed word -> original with spaces
+
+    for (const original of rawLines) {
+      const processed = original.replace(/\s+/g, ''); // Remove spaces for grid
+
+      // Check for non-letter characters (after removing spaces)
+      if (!/^[A-Z]+$/.test(processed)) {
+        setError(`Invalid word "${original}": only letters A-Z are allowed`);
         return null;
       }
+
+      processedWords.push(processed);
+      displayNames[processed] = original; // Keep original for display
     }
 
     // Check for duplicates
-    const uniqueWords = [...new Set(lines)];
-    if (uniqueWords.length !== lines.length) {
+    const uniqueWords = [...new Set(processedWords)];
+    if (uniqueWords.length !== processedWords.length) {
       setError('Duplicate words detected. Please remove duplicates.');
       return null;
     }
@@ -34,20 +44,20 @@ function WordInput({ onGenerate, disabled }) {
     }
 
     setError('');
-    return uniqueWords;
+    return { words: uniqueWords, displayNames };
   };
 
   const handleGenerate = () => {
-    const words = validateAndParse();
-    if (words) {
-      onGenerate(words);
+    const result = validateAndParse();
+    if (result) {
+      onGenerate(result.words, result.displayNames);
     }
   };
 
   return (
     <div className="word-input">
       <h3>Enter Words</h3>
-      <p className="hint">Enter one word per line (letters only)</p>
+      <p className="hint">Enter one word per line (spaces are ignored)</p>
       <textarea
         value={text}
         onChange={(e) => setText(e.target.value)}
