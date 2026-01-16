@@ -3,37 +3,120 @@ import { jsPDF } from 'jspdf';
 
 /**
  * ExportPanel Component
- * Save/load/export buttons for the crossword
  */
 function ExportPanel({
   gridRef,
   grid,
   gridWidth,
   gridHeight,
-  words,
   displayNames,
-  placements,
   clues,
   acrossWords,
   downWords,
   onLoad,
   disabled
 }) {
-  // Get display name (with spaces) or fall back to the word itself
   const getDisplayName = (word) => displayNames?.[word] || word;
 
-  // Save to JSON file
+  // === HELPER: Rebuild placements from the grid ===
+  const getPlacementsFromGrid = () => {
+    const placementsList = [];
+    const height = grid.length;
+    const width = grid[0].length;
+
+    // Across
+    for (let r = 0; r < height; r++) {
+      let c = 0;
+      while (c < width) {
+        const cell = grid[r][c];
+        if (cell && !cell.isBlack && cell.letter) {
+          const startCol = c;
+          let word = '';
+          while (c < width && grid[r][c].letter && !grid[r][c].isBlack) {
+            word += grid[r][c].letter;
+            c++;
+          }
+          if (word.length > 1) {
+            placementsList.push({
+              word,
+              row: r,
+              col: startCol,
+              isHorizontal: true
+            });
+          }
+        } else {
+          c++;
+        }
+      }
+    }
+
+    // Down
+    for (let c = 0; c < width; c++) {
+      let r = 0;
+      while (r < height) {
+        const cell = grid[r][c];
+        if (cell && !cell.isBlack && cell.letter) {
+          const startRow = r;
+          let word = '';
+          while (r < height && grid[r][c].letter && !grid[r][c].isBlack) {
+            word += grid[r][c].letter;
+            r++;
+          }
+          if (word.length > 1) {
+            placementsList.push({
+              word,
+              row: startRow,
+              col: c,
+              isHorizontal: false
+            });
+          }
+        } else {
+          r++;
+        }
+      }
+    }
+
+    return placementsList;
+  };
+
+  // === SAVE JSON ===
   const handleSave = () => {
     const filename = prompt('Enter filename:', 'crossword');
-    if (!filename) return; // User cancelled
+    if (!filename) return;
+
+    const allWords = new Set();
+    acrossWords?.forEach(({ word }) => allWords.add(word));
+    downWords?.forEach(({ word }) => allWords.add(word));
+
+    const updatedPlacements = getPlacementsFromGrid();
+
+    // Update displayNames: just use the word itself
+    const updatedDisplayNames = { ...displayNames };
+    allWords.forEach((word) => {
+      if (!updatedDisplayNames[word]) {
+        updatedDisplayNames[word] = word;
+      }
+    });
+
+    // Update clues: add empty strings for new words if missing
+    const updatedClues = {
+      across: { ...clues.across },
+      down: { ...clues.down }
+    };
+    acrossWords?.forEach(({ word }) => {
+      if (!updatedClues.across[word]) updatedClues.across[word] = '';
+    });
+    downWords?.forEach(({ word }) => {
+      if (!updatedClues.down[word]) updatedClues.down[word] = '';
+    });
 
     const data = {
       gridWidth,
       gridHeight,
-      words,
-      displayNames,
-      placements,
-      clues
+      words: Array.from(allWords),
+      displayNames: updatedDisplayNames,
+      placements: updatedPlacements,
+      clues: updatedClues
     };
 
     const json = JSON.stringify(data, null, 2);
@@ -48,7 +131,7 @@ function ExportPanel({
     URL.revokeObjectURL(url);
   };
 
-  // Load from JSON file
+  // === LOAD JSON ===
   const handleLoad = () => {
     const input = document.createElement('input');
     input.type = 'file';
@@ -73,18 +156,11 @@ function ExportPanel({
     input.click();
   };
 
-  // Export word list as text file
+  // === EXPORT WORDS TEXT FILE ===
   const handleExportWords = () => {
-    // Collect all words from across and down
     const allWords = new Set();
-
-    acrossWords?.forEach(({ word }) => {
-      allWords.add(getDisplayName(word));
-    });
-
-    downWords?.forEach(({ word }) => {
-      allWords.add(getDisplayName(word));
-    });
+    acrossWords?.forEach(({ word }) => allWords.add(getDisplayName(word)));
+    downWords?.forEach(({ word }) => allWords.add(getDisplayName(word)));
 
     if (allWords.size === 0) {
       alert('No words to export');
@@ -106,7 +182,7 @@ function ExportPanel({
     URL.revokeObjectURL(url);
   };
 
-  // Export to PDF
+  // === EXPORT PDF ===
   const handleExportPDF = async () => {
     if (!gridRef?.current) {
       alert('No crossword grid to export');
@@ -114,20 +190,18 @@ function ExportPanel({
     }
 
     const filename = prompt('Enter filename:', 'crossword');
-    if (!filename) return; // User cancelled
+    if (!filename) return;
 
     try {
-      // Capture empty grid (without letters) for puzzle page
       const emptyCanvas = await html2canvas(gridRef.current, {
         backgroundColor: '#ffffff',
         scale: 2,
         onclone: (clonedDoc) => {
-          const letters = clonedDoc.querySelectorAll('.cell-letter');
-          letters.forEach(el => el.style.display = 'none');
+          clonedDoc.querySelectorAll('.cell-letter')
+            .forEach(el => (el.style.display = 'none'));
         }
       });
 
-      // Capture filled grid (with letters) for answer key
       const filledCanvas = await html2canvas(gridRef.current, {
         backgroundColor: '#ffffff',
         scale: 2
@@ -135,119 +209,115 @@ function ExportPanel({
 
       const emptyImgData = emptyCanvas.toDataURL('image/png');
       const filledImgData = filledCanvas.toDataURL('image/png');
+
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
 
-      // Calculate image dimensions
       const maxWidth = pageWidth - 40;
-      const imgAspect = emptyCanvas.width / emptyCanvas.height;
+      const aspect = emptyCanvas.width / emptyCanvas.height;
       let imgWidth = maxWidth;
-      let imgHeight = imgWidth / imgAspect;
+      let imgHeight = imgWidth / aspect;
       if (imgHeight > 120) {
         imgHeight = 120;
-        imgWidth = imgHeight * imgAspect;
+        imgWidth = imgHeight * aspect;
       }
       const imgX = (pageWidth - imgWidth) / 2;
 
-      // === PAGE 1+: PUZZLE (empty grid + clues) ===
+      const PAGE_MARGIN_X = 20;
+      const PAGE_MARGIN_Y = 20;
+      const PAGE_BOTTOM = 280;
+      const COLUMN_COUNT = 3;
+      const COLUMN_GAP = 6;
+      const usableWidth = pageWidth - PAGE_MARGIN_X * 2;
+      const columnWidth = (usableWidth - COLUMN_GAP * (COLUMN_COUNT - 1)) / COLUMN_COUNT;
+
+      const renderClueSection = ({ title, items, startY, renderText }) => {
+        let column = 0;
+        let x = PAGE_MARGIN_X;
+        let y = startY;
+
+        pdf.setFont(undefined, 'bold');
+        pdf.setFontSize(14);
+        pdf.text(title, x, y);
+        pdf.setFont(undefined, 'normal');
+        y += 7;
+        pdf.setFontSize(10);
+
+        for (const item of items) {
+          const text = renderText(item);
+          const lines = pdf.splitTextToSize(text, columnWidth);
+          const blockHeight = lines.length * 5;
+
+          if (y + blockHeight > PAGE_BOTTOM) {
+            column++;
+            if (column >= COLUMN_COUNT) {
+              pdf.addPage();
+              column = 0;
+            }
+            x = PAGE_MARGIN_X + column * (columnWidth + COLUMN_GAP);
+            y = PAGE_MARGIN_Y;
+          }
+
+          pdf.text(lines, x, y);
+          y += blockHeight;
+        }
+
+        return y;
+      };
+
+      // Puzzle page
       pdf.setFontSize(18);
-      pdf.text('Crossword Puzzle', 105, 15, { align: 'center' });
+      pdf.text('Crossword Puzzle', pageWidth / 2, 15, { align: 'center' });
       pdf.addImage(emptyImgData, 'PNG', imgX, 25, imgWidth, imgHeight);
 
       let yPos = 35 + imgHeight;
 
-      // Across clues
-      if (acrossWords?.length > 0) {
-        pdf.setFontSize(14);
-        pdf.text('Across', 20, yPos);
-        yPos += 7;
-
-        pdf.setFontSize(10);
-        for (const { number, word } of acrossWords) {
-          const clue = clues.across[word] || '(no clue)';
-          const text = `${number}. ${clue}`;
-          if (yPos > 280) {
-            pdf.addPage();
-            yPos = 20;
-          }
-          pdf.text(text, 20, yPos);
-          yPos += 5;
-        }
+      if (acrossWords?.length) {
+        yPos = renderClueSection({
+          title: 'Across',
+          items: acrossWords,
+          startY: yPos,
+          renderText: ({ number, word }) => `${number}. ${clues.across[word] || ''}`
+        });
       }
 
-      yPos += 5;
+      yPos += 6;
 
-      // Down clues
-      if (downWords?.length > 0) {
-        if (yPos > 270) {
-          pdf.addPage();
-          yPos = 20;
-        }
-        pdf.setFontSize(14);
-        pdf.text('Down', 20, yPos);
-        yPos += 7;
-
-        pdf.setFontSize(10);
-        for (const { number, word } of downWords) {
-          const clue = clues.down[word] || '(no clue)';
-          const text = `${number}. ${clue}`;
-          if (yPos > 280) {
-            pdf.addPage();
-            yPos = 20;
-          }
-          pdf.text(text, 20, yPos);
-          yPos += 5;
-        }
+      if (downWords?.length) {
+        yPos = renderClueSection({
+          title: 'Down',
+          items: downWords,
+          startY: yPos,
+          renderText: ({ number, word }) => `${number}. ${clues.down[word] || ''}`
+        });
       }
 
-      // === ANSWER KEY PAGE: filled grid + answers ===
+      // Answer Key page
       pdf.addPage();
       pdf.setFontSize(18);
-      pdf.text('Answer Key', 105, 15, { align: 'center' });
+      pdf.text('Answer Key', pageWidth / 2, 15, { align: 'center' });
       pdf.addImage(filledImgData, 'PNG', imgX, 25, imgWidth, imgHeight);
 
       yPos = 35 + imgHeight;
 
-      // Across answers
-      if (acrossWords?.length > 0) {
-        pdf.setFontSize(14);
-        pdf.text('Across', 20, yPos);
-        yPos += 7;
-
-        pdf.setFontSize(10);
-        for (const { number, word } of acrossWords) {
-          const text = `${number}. ${getDisplayName(word)}`;
-          if (yPos > 280) {
-            pdf.addPage();
-            yPos = 20;
-          }
-          pdf.text(text, 20, yPos);
-          yPos += 5;
-        }
+      if (acrossWords?.length) {
+        yPos = renderClueSection({
+          title: 'Across',
+          items: acrossWords,
+          startY: yPos,
+          renderText: ({ number, word }) => `${number}. ${getDisplayName(word)}`
+        });
       }
 
-      yPos += 5;
+      yPos += 6;
 
-      // Down answers
-      if (downWords?.length > 0) {
-        if (yPos > 270) {
-          pdf.addPage();
-          yPos = 20;
-        }
-        pdf.setFontSize(14);
-        pdf.text('Down', 20, yPos);
-        yPos += 7;
-
-        pdf.setFontSize(10);
-        for (const { number, word } of downWords) {
-          const text = `${number}. ${getDisplayName(word)}`;
-          if (yPos > 280) {
-            pdf.addPage();
-            yPos = 20;
-          }
-          pdf.text(text, 20, yPos);
-          yPos += 5;
-        }
+      if (downWords?.length) {
+        yPos = renderClueSection({
+          title: 'Down',
+          items: downWords,
+          startY: yPos,
+          renderText: ({ number, word }) => `${number}. ${getDisplayName(word)}`
+        });
       }
 
       pdf.save(`${filename}.pdf`);
