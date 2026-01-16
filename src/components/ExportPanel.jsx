@@ -24,6 +24,9 @@ function ExportPanel({
 
   // Save to JSON file
   const handleSave = () => {
+    const filename = prompt('Enter filename:', 'crossword');
+    if (!filename) return; // User cancelled
+
     const data = {
       gridWidth,
       gridHeight,
@@ -39,7 +42,7 @@ function ExportPanel({
 
     const a = document.createElement('a');
     a.href = url;
-    a.download = 'crossword.json';
+    a.download = `${filename}.json`;
     a.click();
 
     URL.revokeObjectURL(url);
@@ -70,26 +73,37 @@ function ExportPanel({
     input.click();
   };
 
-  // Export to PNG image
-  const handleExportImage = async () => {
-    if (!gridRef?.current) {
-      alert('No crossword grid to export');
+  // Export word list as text file
+  const handleExportWords = () => {
+    // Collect all words from across and down
+    const allWords = new Set();
+
+    acrossWords?.forEach(({ word }) => {
+      allWords.add(getDisplayName(word));
+    });
+
+    downWords?.forEach(({ word }) => {
+      allWords.add(getDisplayName(word));
+    });
+
+    if (allWords.size === 0) {
+      alert('No words to export');
       return;
     }
 
-    try {
-      const canvas = await html2canvas(gridRef.current, {
-        backgroundColor: '#ffffff',
-        scale: 2
-      });
+    const filename = prompt('Enter filename:', 'wordlist');
+    if (!filename) return;
 
-      const link = document.createElement('a');
-      link.download = 'crossword.png';
-      link.href = canvas.toDataURL('image/png');
-      link.click();
-    } catch (err) {
-      alert('Failed to export image: ' + err.message);
-    }
+    const text = Array.from(allWords).join('\n');
+    const blob = new Blob([text], { type: 'text/plain' });
+    const url = URL.createObjectURL(blob);
+
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `${filename}.txt`;
+    a.click();
+
+    URL.revokeObjectURL(url);
   };
 
   // Export to PDF
@@ -98,6 +112,9 @@ function ExportPanel({
       alert('No crossword grid to export');
       return;
     }
+
+    const filename = prompt('Enter filename:', 'crossword');
+    if (!filename) return; // User cancelled
 
     try {
       // Capture empty grid (without letters) for puzzle page
@@ -146,8 +163,8 @@ function ExportPanel({
         yPos += 7;
 
         pdf.setFontSize(10);
-        for (const { number } of acrossWords) {
-          const clue = clues.across[number] || '(no clue)';
+        for (const { number, word } of acrossWords) {
+          const clue = clues.across[word] || '(no clue)';
           const text = `${number}. ${clue}`;
           if (yPos > 280) {
             pdf.addPage();
@@ -171,8 +188,8 @@ function ExportPanel({
         yPos += 7;
 
         pdf.setFontSize(10);
-        for (const { number } of downWords) {
-          const clue = clues.down[number] || '(no clue)';
+        for (const { number, word } of downWords) {
+          const clue = clues.down[word] || '(no clue)';
           const text = `${number}. ${clue}`;
           if (yPos > 280) {
             pdf.addPage();
@@ -233,7 +250,7 @@ function ExportPanel({
         }
       }
 
-      pdf.save('crossword.pdf');
+      pdf.save(`${filename}.pdf`);
     } catch (err) {
       alert('Failed to export PDF: ' + err.message);
     }
@@ -249,11 +266,11 @@ function ExportPanel({
         <button onClick={handleLoad}>
           Load from JSON
         </button>
-        <button onClick={handleExportImage} disabled={disabled || !grid}>
-          Export PNG
-        </button>
         <button onClick={handleExportPDF} disabled={disabled || !grid}>
           Export PDF
+        </button>
+        <button onClick={handleExportWords} disabled={disabled || !grid}>
+          Export Words
         </button>
       </div>
     </div>

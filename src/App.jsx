@@ -51,14 +51,22 @@ function App() {
     setClues({ across: {}, down: {} });
   };
 
-  // Handle clue change
-  const handleClueChange = (direction, number, value) => {
+  // Handle clue change (keyed by word, not number, so clues follow words when renumbered)
+  const handleClueChange = (direction, word, value) => {
     setClues((prev) => ({
       ...prev,
       [direction]: {
         ...prev[direction],
-        [number]: value
+        [word]: value
       }
+    }));
+  };
+
+  // Handle display name change
+  const handleDisplayNameChange = (word, newDisplayName) => {
+    setDisplayNames((prev) => ({
+      ...prev,
+      [word]: newDisplayName
     }));
   };
 
@@ -192,6 +200,7 @@ function App() {
             clues={clues}
             displayNames={displayNames}
             onClueChange={handleClueChange}
+            onDisplayNameChange={handleDisplayNameChange}
           />
         </div>
       </main>
