@@ -10,12 +10,13 @@ import { forwardRef, useState, useRef, useEffect } from 'react';
  * - Word suggestions from Datamuse API for selected patterns
  */
 const CrosswordGrid = forwardRef(function CrosswordGrid(
-  { grid, cellNumbers, showLetters = true, onCellChange, canShift, onShift },
+  { grid, cellNumbers, showLetters = true, onCellChange, canShift, onShift, pencilMarks = {}, onPencilChange },
   ref
 ) {
   const [selectedCells, setSelectedCells] = useState(new Set());
   const [isDragging, setIsDragging] = useState(false);
   const [dragStart, setDragStart] = useState(null);
+  const [pencilMode, setPencilMode] = useState(false);
   // Each direction has array of {pattern, cells, key} objects
   const [wordInfos, setWordInfos] = useState({ across: [], down: [] });
   const [suggestions, setSuggestions] = useState({}); // keyed by pattern
@@ -367,20 +368,33 @@ const CrosswordGrid = forwardRef(function CrosswordGrid(
 
     if (e.key === 'Backspace' || e.key === 'Delete') {
       e.preventDefault();
-      // Clear all selected cells
+      // Clear all selected cells (both regular and pencil)
       selectedCells.forEach((key) => {
         const [row, col] = key.split('-').map(Number);
         onCellChange?.(row, col, null);
+        onPencilChange?.(row, col, null);
       });
     } else if (e.key === 'Escape') {
       setSelectedCells(new Set());
-      setSuggestions([]);
+      setSuggestions({});
     } else if (/^[A-Z]$/.test(letter)) {
       e.preventDefault();
       // Set letter in all selected cells
       selectedCells.forEach((key) => {
         const [row, col] = key.split('-').map(Number);
-        onCellChange?.(row, col, letter);
+        if (pencilMode) {
+          // In pencil mode, toggle the letter in pencil marks
+          const currentMarks = pencilMarks[key] || '';
+          const newMarks = currentMarks.includes(letter)
+            ? currentMarks.replace(letter, '')
+            : currentMarks + letter;
+          onPencilChange?.(row, col, newMarks || null);
+          onCellChange?.(row, col, null);
+        } else {
+          // In regular mode, set regular letter and clear pencil marks
+          onCellChange?.(row, col, letter);
+          onPencilChange?.(row, col, null);
+        }
       });
     }
   };
@@ -416,9 +430,18 @@ const CrosswordGrid = forwardRef(function CrosswordGrid(
 
   return (
     <div className="crossword-grid-container">
-      <p className="grid-hint">
-        Click to select, Shift+click or drag to select multiple. Type to fill, Backspace to clear.
-      </p>
+      <div className="grid-toolbar">
+        <p className="grid-hint">
+          Click to select, Shift+click or drag to select multiple. Type to fill, Backspace to clear.
+        </p>
+        <button
+          className={`pencil-mode-btn ${pencilMode ? 'active' : ''}`}
+          onClick={() => setPencilMode(!pencilMode)}
+          title={pencilMode ? 'Turn off pencil mode' : 'Turn on pencil mode'}
+        >
+          {pencilMode ? 'Pencil Mode On' : 'Pencil Mode Off'}
+        </button>
+      </div>
 
       {/* Grid with shift controls */}
       <div className="grid-with-controls">
@@ -458,9 +481,14 @@ const CrosswordGrid = forwardRef(function CrosswordGrid(
             {grid.map((row, rowIndex) =>
               row.map((cell, colIndex) => {
                 const cellNum = cellNumbers?.[rowIndex]?.[colIndex];
-                const isBlack = cell === null;
                 const key = cellKey(rowIndex, colIndex);
+                const pencilMark = pencilMarks[key] || '';
+                const hasRegularLetter = cell !== null;
+                const hasPencilMark = pencilMark.length > 0;
+                const isBlack = !hasRegularLetter && !hasPencilMark;
                 const isSelected = selectedCells.has(key);
+                // Sort pencil marks alphabetically for consistent display
+                const sortedPencilMarks = pencilMark.split('').sort().join('');
 
                 return (
                   <div
@@ -471,7 +499,16 @@ const CrosswordGrid = forwardRef(function CrosswordGrid(
                     onMouseEnter={(e) => handleMouseEnter(e, rowIndex, colIndex)}
                   >
                     {cellNum && <span className="cell-number">{cellNum}</span>}
-                    {!isBlack && showLetters && <span className="cell-letter">{cell}</span>}
+                    {showLetters && hasRegularLetter && (
+                      <span className="cell-letter">{cell}</span>
+                    )}
+                    {showLetters && !hasRegularLetter && hasPencilMark && (
+                      <div className="pencil-marks">
+                        {sortedPencilMarks.split('').map((letter, i) => (
+                          <span key={i} className="pencil-letter">{letter}</span>
+                        ))}
+                      </div>
+                    )}
                   </div>
                 );
               })

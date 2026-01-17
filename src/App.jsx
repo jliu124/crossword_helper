@@ -28,6 +28,9 @@ function App() {
   // Show letters toggle
   const [showLetters, setShowLetters] = useState(true);
 
+  // Pencil marks (tentative letters)
+  const [pencilMarks, setPencilMarks] = useState({});
+
   // Ref for grid export
   const gridRef = useRef(null);
 
@@ -97,6 +100,20 @@ function App() {
     setCellNumbers(numbering.cellNumbers);
     setAcrossWords(numbering.acrossWords);
     setDownWords(numbering.downWords);
+  };
+
+  // Handle pencil mark change
+  const handlePencilChange = (row, col, letter) => {
+    const key = `${row}-${col}`;
+    setPencilMarks(prev => {
+      const updated = { ...prev };
+      if (letter === null) {
+        delete updated[key];
+      } else {
+        updated[key] = letter;
+      }
+      return updated;
+    });
   };
 
   // Check if grid can be shifted in a direction
@@ -257,6 +274,7 @@ function App() {
     setDownWords([]);
     setUnplacedWords([]);
     setClues({ across: {}, down: {} });
+    setPencilMarks({});
   };
 
   return (
@@ -329,6 +347,8 @@ function App() {
             onCellChange={handleCellChange}
             canShift={canShift}
             onShift={shiftGrid}
+            pencilMarks={pencilMarks}
+            onPencilChange={handlePencilChange}
           />
 
           <ClueEditor
