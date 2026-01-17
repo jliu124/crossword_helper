@@ -198,14 +198,22 @@ function ExportPanel({
         backgroundColor: '#ffffff',
         scale: 2,
         onclone: (clonedDoc) => {
+          // Hide regular letters and pencil marks for empty puzzle
           clonedDoc.querySelectorAll('.cell-letter')
+            .forEach(el => (el.style.display = 'none'));
+          clonedDoc.querySelectorAll('.pencil-marks')
             .forEach(el => (el.style.display = 'none'));
         }
       });
 
       const filledCanvas = await html2canvas(gridRef.current, {
         backgroundColor: '#ffffff',
-        scale: 2
+        scale: 2,
+        onclone: (clonedDoc) => {
+          // Hide pencil marks for answer key (only show regular letters)
+          clonedDoc.querySelectorAll('.pencil-marks')
+            .forEach(el => (el.style.display = 'none'));
+        }
       });
 
       const emptyImgData = emptyCanvas.toDataURL('image/png');
@@ -233,37 +241,43 @@ function ExportPanel({
       const columnWidth = (usableWidth - COLUMN_GAP * (COLUMN_COUNT - 1)) / COLUMN_COUNT;
 
       const renderClueSection = ({ title, items, startY, renderText }) => {
-        let column = 0;
-        let x = PAGE_MARGIN_X;
-        let y = startY;
+        // Calculate how to distribute items across columns
+        const itemsPerColumn = Math.ceil(items.length / COLUMN_COUNT);
+        let maxY = startY;
 
+        // Render title spanning all columns
         pdf.setFont(undefined, 'bold');
-        pdf.setFontSize(14);
-        pdf.text(title, x, y);
+        pdf.setFontSize(12);
+        pdf.text(title, PAGE_MARGIN_X, startY);
         pdf.setFont(undefined, 'normal');
-        y += 7;
         pdf.setFontSize(10);
 
-        for (const item of items) {
-          const text = renderText(item);
-          const lines = pdf.splitTextToSize(text, columnWidth);
-          const blockHeight = lines.length * 5;
+        const contentStartY = startY + 6;
 
-          if (y + blockHeight > PAGE_BOTTOM) {
-            column++;
-            if (column >= COLUMN_COUNT) {
-              pdf.addPage();
-              column = 0;
-            }
-            x = PAGE_MARGIN_X + column * (columnWidth + COLUMN_GAP);
-            y = PAGE_MARGIN_Y;
+        // Render each column
+        for (let col = 0; col < COLUMN_COUNT; col++) {
+          const startIdx = col * itemsPerColumn;
+          const endIdx = Math.min(startIdx + itemsPerColumn, items.length);
+          const columnItems = items.slice(startIdx, endIdx);
+
+          if (columnItems.length === 0) continue;
+
+          const x = PAGE_MARGIN_X + col * (columnWidth + COLUMN_GAP);
+          let y = contentStartY;
+
+          for (const item of columnItems) {
+            const text = renderText(item);
+            const lines = pdf.splitTextToSize(text, columnWidth - 2);
+            const blockHeight = lines.length * 4 + 2;
+
+            pdf.text(lines, x, y);
+            y += blockHeight;
           }
 
-          pdf.text(lines, x, y);
-          y += blockHeight;
+          if (y > maxY) maxY = y;
         }
 
-        return y;
+        return maxY + 4;
       };
 
       // Puzzle page
