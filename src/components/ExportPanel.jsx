@@ -19,6 +19,7 @@ function ExportPanel({
   const getDisplayName = (word) => displayNames?.[word] || word;
 
   // === HELPER: Rebuild placements from the grid ===
+  // Note: Grid cells are plain strings (e.g., "A") or null for black squares
   const getPlacementsFromGrid = () => {
     const placementsList = [];
     const height = grid.length;
@@ -29,11 +30,11 @@ function ExportPanel({
       let c = 0;
       while (c < width) {
         const cell = grid[r][c];
-        if (cell && !cell.isBlack && cell.letter) {
+        if (cell !== null) {
           const startCol = c;
           let word = '';
-          while (c < width && grid[r][c].letter && !grid[r][c].isBlack) {
-            word += grid[r][c].letter;
+          while (c < width && grid[r][c] !== null) {
+            word += grid[r][c];
             c++;
           }
           if (word.length > 1) {
@@ -55,11 +56,11 @@ function ExportPanel({
       let r = 0;
       while (r < height) {
         const cell = grid[r][c];
-        if (cell && !cell.isBlack && cell.letter) {
+        if (cell !== null) {
           const startRow = r;
           let word = '';
-          while (r < height && grid[r][c].letter && !grid[r][c].isBlack) {
-            word += grid[r][c].letter;
+          while (r < height && grid[r][c] !== null) {
+            word += grid[r][c];
             r++;
           }
           if (word.length > 1) {

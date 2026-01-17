@@ -90,6 +90,118 @@ function App() {
     setDownWords(numbering.downWords);
   };
 
+  // Check if grid can be shifted in a direction
+  const canShift = (direction) => {
+    if (!grid) return false;
+    const height = grid.length;
+    const width = grid[0].length;
+
+    switch (direction) {
+      case 'up':
+        // Can't shift up if any filled cell is in top row
+        return !grid[0].some(cell => cell !== null);
+      case 'down':
+        // Can't shift down if any filled cell is in bottom row
+        return !grid[height - 1].some(cell => cell !== null);
+      case 'left':
+        // Can't shift left if any filled cell is in leftmost column
+        return !grid.some(row => row[0] !== null);
+      case 'right':
+        // Can't shift right if any filled cell is in rightmost column
+        return !grid.some(row => row[width - 1] !== null);
+      default:
+        return false;
+    }
+  };
+
+  // Shift all filled cells in a direction
+  const shiftGrid = (direction, toEdge = false) => {
+    if (!grid) return;
+
+    let newGrid = grid.map(row => [...row]);
+    const height = newGrid.length;
+    const width = newGrid[0].length;
+
+    const shiftOnce = (dir) => {
+      const shifted = newGrid.map(row => [...row]);
+
+      switch (dir) {
+        case 'up':
+          for (let r = 0; r < height - 1; r++) {
+            for (let c = 0; c < width; c++) {
+              shifted[r][c] = newGrid[r + 1][c];
+            }
+          }
+          for (let c = 0; c < width; c++) {
+            shifted[height - 1][c] = null;
+          }
+          break;
+        case 'down':
+          for (let r = height - 1; r > 0; r--) {
+            for (let c = 0; c < width; c++) {
+              shifted[r][c] = newGrid[r - 1][c];
+            }
+          }
+          for (let c = 0; c < width; c++) {
+            shifted[0][c] = null;
+          }
+          break;
+        case 'left':
+          for (let r = 0; r < height; r++) {
+            for (let c = 0; c < width - 1; c++) {
+              shifted[r][c] = newGrid[r][c + 1];
+            }
+            shifted[r][width - 1] = null;
+          }
+          break;
+        case 'right':
+          for (let r = 0; r < height; r++) {
+            for (let c = width - 1; c > 0; c--) {
+              shifted[r][c] = newGrid[r][c - 1];
+            }
+            shifted[r][0] = null;
+          }
+          break;
+      }
+      return shifted;
+    };
+
+    const canShiftGrid = (g, dir) => {
+      switch (dir) {
+        case 'up':
+          return !g[0].some(cell => cell !== null);
+        case 'down':
+          return !g[height - 1].some(cell => cell !== null);
+        case 'left':
+          return !g.some(row => row[0] !== null);
+        case 'right':
+          return !g.some(row => row[width - 1] !== null);
+        default:
+          return false;
+      }
+    };
+
+    if (toEdge) {
+      // Shift until we can't anymore
+      while (canShiftGrid(newGrid, direction)) {
+        newGrid = shiftOnce(direction);
+      }
+    } else {
+      // Single shift
+      if (canShiftGrid(newGrid, direction)) {
+        newGrid = shiftOnce(direction);
+      }
+    }
+
+    setGrid(newGrid);
+
+    // Regenerate numbering
+    const numbering = generateNumbering(newGrid);
+    setCellNumbers(numbering.cellNumbers);
+    setAcrossWords(numbering.acrossWords);
+    setDownWords(numbering.downWords);
+  };
+
   // Load from JSON
   const handleLoad = (data) => {
     setGridWidth(data.gridWidth);
@@ -99,13 +211,27 @@ function App() {
     setPlacements(data.placements);
     setClues(data.clues || { across: {}, down: {} });
 
-    // Regenerate grid from placements
-    const result = generateCrossword(data.words, data.gridWidth, data.gridHeight);
-    setGrid(result.grid);
-    setUnplacedWords(result.unplacedWords);
+    // Reconstruct grid from saved placements
+    const loadedGrid = Array(data.gridHeight)
+      .fill(null)
+      .map(() => Array(data.gridWidth).fill(null));
+
+    for (const placement of data.placements) {
+      const { word, row, col, isHorizontal } = placement;
+      for (let i = 0; i < word.length; i++) {
+        const r = isHorizontal ? row : row + i;
+        const c = isHorizontal ? col + i : col;
+        if (r < data.gridHeight && c < data.gridWidth) {
+          loadedGrid[r][c] = word[i];
+        }
+      }
+    }
+
+    setGrid(loadedGrid);
+    setUnplacedWords([]);
 
     // Generate numbering
-    const numbering = generateNumbering(result.grid);
+    const numbering = generateNumbering(loadedGrid);
     setCellNumbers(numbering.cellNumbers);
     setAcrossWords(numbering.acrossWords);
     setDownWords(numbering.downWords);
@@ -192,6 +318,8 @@ function App() {
             cellNumbers={cellNumbers}
             showLetters={showLetters}
             onCellChange={handleCellChange}
+            canShift={canShift}
+            onShift={shiftGrid}
           />
 
           <ClueEditor

@@ -10,7 +10,7 @@ import { forwardRef, useState, useRef, useEffect } from 'react';
  * - Word suggestions from Datamuse API for selected patterns
  */
 const CrosswordGrid = forwardRef(function CrosswordGrid(
-  { grid, cellNumbers, showLetters = true, onCellChange },
+  { grid, cellNumbers, showLetters = true, onCellChange, canShift, onShift },
   ref
 ) {
   const [selectedCells, setSelectedCells] = useState(new Set());
@@ -219,6 +219,47 @@ const CrosswordGrid = forwardRef(function CrosswordGrid(
 
     const letter = e.key.toUpperCase();
 
+    // Arrow key navigation
+    if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(e.key)) {
+      e.preventDefault();
+
+      // Get the "anchor" cell (last selected, or first if shift-extending)
+      const selectedArray = Array.from(selectedCells);
+      const lastKey = selectedArray[selectedArray.length - 1];
+      const [row, col] = lastKey.split('-').map(Number);
+
+      let newRow = row;
+      let newCol = col;
+
+      switch (e.key) {
+        case 'ArrowUp':
+          newRow = Math.max(0, row - 1);
+          break;
+        case 'ArrowDown':
+          newRow = Math.min(height - 1, row + 1);
+          break;
+        case 'ArrowLeft':
+          newCol = Math.max(0, col - 1);
+          break;
+        case 'ArrowRight':
+          newCol = Math.min(width - 1, col + 1);
+          break;
+      }
+
+      const newKey = cellKey(newRow, newCol);
+
+      if (e.shiftKey) {
+        // Extend selection
+        const newSelection = new Set(selectedCells);
+        newSelection.add(newKey);
+        setSelectedCells(newSelection);
+      } else {
+        // Move to new cell
+        setSelectedCells(new Set([newKey]));
+      }
+      return;
+    }
+
     if (e.key === 'Backspace' || e.key === 'Delete') {
       e.preventDefault();
       // Clear all selected cells
@@ -254,50 +295,97 @@ const CrosswordGrid = forwardRef(function CrosswordGrid(
 
   const pattern = getPatternFromSelection();
 
+  // Shift button component
+  const ShiftButton = ({ direction, toEdge, label }) => {
+    const disabled = !canShift?.(direction);
+    return (
+      <button
+        className={`shift-btn shift-${direction}${toEdge ? '-edge' : ''}`}
+        onClick={() => onShift?.(direction, toEdge)}
+        disabled={disabled}
+        title={`Shift ${toEdge ? 'all the way ' : ''}${direction}`}
+      >
+        {label}
+      </button>
+    );
+  };
+
   return (
     <div className="crossword-grid-container">
       <p className="grid-hint">
         Click to select, Shift+click or drag to select multiple. Type to fill, Backspace to clear.
       </p>
-      <div
-        ref={(el) => {
-          gridContainerRef.current = el;
-          if (typeof ref === 'function') ref(el);
-          else if (ref) ref.current = el;
-        }}
-        className="crossword-grid"
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${width}, 1fr)`,
-          gridTemplateRows: `repeat(${height}, 1fr)`,
-        }}
-        tabIndex={0}
-        onKeyDown={handleKeyDown}
-        onBlur={handleBlur}
-        onMouseUp={handleMouseUp}
-        onMouseLeave={handleMouseUp}
-      >
-        {grid.map((row, rowIndex) =>
-          row.map((cell, colIndex) => {
-            const cellNum = cellNumbers?.[rowIndex]?.[colIndex];
-            const isBlack = cell === null;
-            const key = cellKey(rowIndex, colIndex);
-            const isSelected = selectedCells.has(key);
 
-            return (
-              <div
-                key={key}
-                ref={(el) => { cellRefs.current[key] = el; }}
-                className={`grid-cell ${isBlack ? 'black' : 'white'} ${isSelected ? 'selected' : ''} editable`}
-                onMouseDown={(e) => handleMouseDown(e, rowIndex, colIndex)}
-                onMouseEnter={(e) => handleMouseEnter(e, rowIndex, colIndex)}
-              >
-                {cellNum && <span className="cell-number">{cellNum}</span>}
-                {!isBlack && showLetters && <span className="cell-letter">{cell}</span>}
-              </div>
-            );
-          })
-        )}
+      {/* Grid with shift controls */}
+      <div className="grid-with-controls">
+        {/* Top controls */}
+        <div className="shift-controls shift-controls-top">
+          <ShiftButton direction="up" toEdge={true} label="⇈" />
+          <ShiftButton direction="up" toEdge={false} label="↑" />
+        </div>
+
+        {/* Middle row: left controls, grid, right controls */}
+        <div className="grid-middle-row">
+          {/* Left controls */}
+          <div className="shift-controls shift-controls-left">
+            <ShiftButton direction="left" toEdge={true} label="⇇" />
+            <ShiftButton direction="left" toEdge={false} label="←" />
+          </div>
+
+          {/* The grid */}
+          <div
+            ref={(el) => {
+              gridContainerRef.current = el;
+              if (typeof ref === 'function') ref(el);
+              else if (ref) ref.current = el;
+            }}
+            className="crossword-grid"
+            style={{
+              display: 'grid',
+              gridTemplateColumns: `repeat(${width}, 1fr)`,
+              gridTemplateRows: `repeat(${height}, 1fr)`,
+            }}
+            tabIndex={0}
+            onKeyDown={handleKeyDown}
+            onBlur={handleBlur}
+            onMouseUp={handleMouseUp}
+            onMouseLeave={handleMouseUp}
+          >
+            {grid.map((row, rowIndex) =>
+              row.map((cell, colIndex) => {
+                const cellNum = cellNumbers?.[rowIndex]?.[colIndex];
+                const isBlack = cell === null;
+                const key = cellKey(rowIndex, colIndex);
+                const isSelected = selectedCells.has(key);
+
+                return (
+                  <div
+                    key={key}
+                    ref={(el) => { cellRefs.current[key] = el; }}
+                    className={`grid-cell ${isBlack ? 'black' : 'white'} ${isSelected ? 'selected' : ''} editable`}
+                    onMouseDown={(e) => handleMouseDown(e, rowIndex, colIndex)}
+                    onMouseEnter={(e) => handleMouseEnter(e, rowIndex, colIndex)}
+                  >
+                    {cellNum && <span className="cell-number">{cellNum}</span>}
+                    {!isBlack && showLetters && <span className="cell-letter">{cell}</span>}
+                  </div>
+                );
+              })
+            )}
+          </div>
+
+          {/* Right controls */}
+          <div className="shift-controls shift-controls-right">
+            <ShiftButton direction="right" toEdge={false} label="→" />
+            <ShiftButton direction="right" toEdge={true} label="⇉" />
+          </div>
+        </div>
+
+        {/* Bottom controls */}
+        <div className="shift-controls shift-controls-bottom">
+          <ShiftButton direction="down" toEdge={false} label="↓" />
+          <ShiftButton direction="down" toEdge={true} label="⇊" />
+        </div>
       </div>
 
       {/* Word suggestions panel */}
