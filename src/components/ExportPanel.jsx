@@ -210,7 +210,9 @@ function ExportPanel({
         backgroundColor: '#ffffff',
         scale: 2,
         onclone: (clonedDoc) => {
-          // Hide pencil marks for answer key (only show regular letters)
+          // Show regular letters and hide pencil marks for answer key
+          clonedDoc.querySelectorAll('.cell-letter')
+            .forEach(el => (el.style.display = 'block'));
           clonedDoc.querySelectorAll('.pencil-marks')
             .forEach(el => (el.style.display = 'none'));
         }
@@ -241,48 +243,69 @@ function ExportPanel({
       const columnWidth = (usableWidth - COLUMN_GAP * (COLUMN_COUNT - 1)) / COLUMN_COUNT;
 
       const renderClueSection = ({ title, items, startY, renderText }) => {
-        // Calculate how to distribute items across columns
-        const itemsPerColumn = Math.ceil(items.length / COLUMN_COUNT);
-        let maxY = startY;
+        const availableHeight = PAGE_BOTTOM - startY - 8; // Space for title
+        const availableArea = availableHeight * COLUMN_COUNT;
 
-        // Render title spanning all columns
-        pdf.setFont(undefined, 'bold');
-        pdf.setFontSize(12);
-        pdf.text(title, PAGE_MARGIN_X, startY);
-        pdf.setFont(undefined, 'normal');
-        pdf.setFontSize(10);
+        // Try different font sizes until content fits
+        let fontSize = 10;
+        const minFontSize = 5;
+        let fits = false;
 
-        const contentStartY = startY + 6;
+        while (fontSize >= minFontSize && !fits) {
+          pdf.setFontSize(fontSize);
+          const lineHeight = fontSize * 0.4 + 1;
+          let totalHeight = 0;
 
-        // Render each column
-        for (let col = 0; col < COLUMN_COUNT; col++) {
-          const startIdx = col * itemsPerColumn;
-          const endIdx = Math.min(startIdx + itemsPerColumn, items.length);
-          const columnItems = items.slice(startIdx, endIdx);
-
-          if (columnItems.length === 0) continue;
-
-          const x = PAGE_MARGIN_X + col * (columnWidth + COLUMN_GAP);
-          let y = contentStartY;
-
-          for (const item of columnItems) {
+          for (const item of items) {
             const text = renderText(item);
             const lines = pdf.splitTextToSize(text, columnWidth - 2);
-            const blockHeight = lines.length * 4 + 2;
-
-            pdf.text(lines, x, y);
-            y += blockHeight;
+            totalHeight += lines.length * lineHeight + 1;
           }
 
-          if (y > maxY) maxY = y;
+          if (totalHeight <= availableArea) {
+            fits = true;
+          } else {
+            fontSize -= 0.5;
+          }
         }
 
+        // Render title
+        pdf.setFont(undefined, 'bold');
+        pdf.setFontSize(Math.max(fontSize + 2, 8));
+        pdf.text(title, PAGE_MARGIN_X, startY);
+        pdf.setFont(undefined, 'normal');
+        pdf.setFontSize(fontSize);
+
+        const lineHeight = fontSize * 0.4 + 1;
+        let column = 0;
+        let y = startY + 6;
+        let maxY = y;
+        const columnStartY = y;
+
+        for (const item of items) {
+          const text = renderText(item);
+          const lines = pdf.splitTextToSize(text, columnWidth - 2);
+          const blockHeight = lines.length * lineHeight + 1;
+
+          // Check if we need to move to next column
+          if (y + blockHeight > PAGE_BOTTOM && column < COLUMN_COUNT - 1) {
+            if (y > maxY) maxY = y;
+            column++;
+            y = columnStartY;
+          }
+
+          const x = PAGE_MARGIN_X + column * (columnWidth + COLUMN_GAP);
+          pdf.text(lines, x, y);
+          y += blockHeight;
+        }
+
+        if (y > maxY) maxY = y;
         return maxY + 4;
       };
 
       // Puzzle page
       pdf.setFontSize(18);
-      pdf.text('Crossword Puzzle', pageWidth / 2, 15, { align: 'center' });
+      pdf.text(filename, pageWidth / 2, 15, { align: 'center' });
       pdf.addImage(emptyImgData, 'PNG', imgX, 25, imgWidth, imgHeight);
 
       let yPos = 35 + imgHeight;
@@ -310,7 +333,7 @@ function ExportPanel({
       // Answer Key page
       pdf.addPage();
       pdf.setFontSize(18);
-      pdf.text('Answer Key', pageWidth / 2, 15, { align: 'center' });
+      pdf.text(`${filename} - Answer Key`, pageWidth / 2, 15, { align: 'center' });
       pdf.addImage(filledImgData, 'PNG', imgX, 25, imgWidth, imgHeight);
 
       yPos = 35 + imgHeight;
