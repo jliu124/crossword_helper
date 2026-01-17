@@ -234,100 +234,137 @@ function ExportPanel({
       }
       const imgX = (pageWidth - imgWidth) / 2;
 
-      const PAGE_MARGIN_X = 20;
+      const PAGE_MARGIN_X = 15;
       const PAGE_MARGIN_Y = 20;
-      const PAGE_BOTTOM = 280;
-      const COLUMN_COUNT = 3;
-      const COLUMN_GAP = 6;
+      const PAGE_BOTTOM = 285;
+      const COLUMN_GAP = 5;
       const usableWidth = pageWidth - PAGE_MARGIN_X * 2;
-      const columnWidth = (usableWidth - COLUMN_GAP * (COLUMN_COUNT - 1)) / COLUMN_COUNT;
+      const columnWidth = (usableWidth - COLUMN_GAP * 2) / 3; // Explicitly 3 columns
 
-      const renderClueSection = ({ title, items, startY, renderText }) => {
-        const availableHeight = PAGE_BOTTOM - startY - 8; // Space for title
-        const availableArea = availableHeight * COLUMN_COUNT;
+      const fontSize = 9;
+      const titleFontSize = 11;
+      const lineHeight = 4;
+      const titleLineHeight = 5;
 
-        // Try different font sizes until content fits
-        let fontSize = 10;
-        const minFontSize = 5;
-        let fits = false;
-
-        while (fontSize >= minFontSize && !fits) {
-          pdf.setFontSize(fontSize);
-          const lineHeight = fontSize * 0.4 + 1;
-          let totalHeight = 0;
-
-          for (const item of items) {
-            const text = renderText(item);
-            const lines = pdf.splitTextToSize(text, columnWidth - 2);
-            totalHeight += lines.length * lineHeight + 1;
-          }
-
-          if (totalHeight <= availableArea) {
-            fits = true;
-          } else {
-            fontSize -= 0.5;
-          }
+      // Build combined clue items for both across and down
+      const buildAllClues = (acrossRenderText, downRenderText) => {
+        const allItems = [];
+        if (acrossWords?.length) {
+          allItems.push({ type: 'title', text: 'Across' });
+          acrossWords.forEach(item => allItems.push({ type: 'clue', text: acrossRenderText(item) }));
         }
-
-        // Render title
-        pdf.setFont(undefined, 'bold');
-        pdf.setFontSize(Math.max(fontSize + 2, 8));
-        pdf.text(title, PAGE_MARGIN_X, startY);
-        pdf.setFont(undefined, 'normal');
-        pdf.setFontSize(fontSize);
-
-        const lineHeight = fontSize * 0.4 + 1;
-        let column = 0;
-        let y = startY + 6;
-        let maxY = y;
-        const columnStartY = y;
-
-        for (const item of items) {
-          const text = renderText(item);
-          const lines = pdf.splitTextToSize(text, columnWidth - 2);
-          const blockHeight = lines.length * lineHeight + 1;
-
-          // Check if we need to move to next column
-          if (y + blockHeight > PAGE_BOTTOM && column < COLUMN_COUNT - 1) {
-            if (y > maxY) maxY = y;
-            column++;
-            y = columnStartY;
-          }
-
-          const x = PAGE_MARGIN_X + column * (columnWidth + COLUMN_GAP);
-          pdf.text(lines, x, y);
-          y += blockHeight;
+        if (downWords?.length) {
+          allItems.push({ type: 'title', text: 'Down' });
+          downWords.forEach(item => allItems.push({ type: 'clue', text: downRenderText(item) }));
         }
-
-        if (y > maxY) maxY = y;
-        return maxY + 4;
+        return allItems;
       };
+
+      // Get height of an item
+      const getItemHeight = (item) => {
+        const isTitle = item.type === 'title';
+        pdf.setFontSize(isTitle ? titleFontSize : fontSize);
+        const lines = pdf.splitTextToSize(item.text, columnWidth - 4);
+        return lines.length * (isTitle ? titleLineHeight : lineHeight) + (isTitle ? 3 : 1);
+      };
+
+      // Calculate if all clues fit in 3 columns starting at startY
+      const calculateAllCluesHeight = (allItems, startY) => {
+        const columnHeights = [0, 0, 0];
+        const maxColumnHeight = PAGE_BOTTOM - startY;
+        let currentColumn = 0;
+        let currentY = 0;
+
+        for (const item of allItems) {
+          const itemHeight = getItemHeight(item);
+
+          if (currentY + itemHeight > maxColumnHeight) {
+            // Move to next column
+            columnHeights[currentColumn] = currentY;
+            currentColumn++;
+            if (currentColumn >= 3) {
+              return { fits: false };
+            }
+            currentY = 0;
+          }
+          currentY += itemHeight;
+        }
+        columnHeights[currentColumn] = currentY;
+
+        return { fits: true, maxHeight: Math.max(...columnHeights) };
+      };
+
+      // Render all clues in 3 columns - guarantees all items are rendered
+      const renderAllClues = (allItems, startY) => {
+        let currentColumn = 0;
+        let currentY = startY;
+        let pageStartY = startY;
+
+        // Calculate x positions for 3 columns
+        const colX = [
+          PAGE_MARGIN_X,
+          PAGE_MARGIN_X + columnWidth + COLUMN_GAP,
+          PAGE_MARGIN_X + (columnWidth + COLUMN_GAP) * 2
+        ];
+
+        for (let i = 0; i < allItems.length; i++) {
+          const item = allItems[i];
+          const isTitle = item.type === 'title';
+          const isDownTitle = isTitle && item.text === 'Down';
+          const itemHeight = getItemHeight(item);
+
+          // Add extra gap before "Down" section
+          const extraGap = isDownTitle ? 6 : 0;
+
+          // Check if need to move to next column or page
+          if (currentY + extraGap + itemHeight > PAGE_BOTTOM && currentY > pageStartY) {
+            // Only move to next column if we've rendered something in current column
+            currentColumn++;
+            if (currentColumn >= 3) {
+              // All 3 columns used, add new page
+              pdf.addPage();
+              currentColumn = 0;
+              pageStartY = PAGE_MARGIN_Y;
+            }
+            currentY = pageStartY;
+          }
+
+          // Add extra gap before "Down" section
+          if (isDownTitle) {
+            currentY += extraGap;
+          }
+
+          // Render the item
+          pdf.setFontSize(isTitle ? titleFontSize : fontSize);
+          pdf.setFont(undefined, isTitle ? 'bold' : 'normal');
+          const lines = pdf.splitTextToSize(item.text, columnWidth - 4);
+          pdf.text(lines, colX[currentColumn], currentY);
+          currentY += itemHeight;
+        }
+      };
+
+      // Check if all clues fit on same page as grid
+      const gridEndY = 35 + imgHeight;
+      const acrossRenderText = ({ number, word }) => `${number}. ${clues.across[word] || ''}`;
+      const downRenderText = ({ number, word }) => `${number}. ${clues.down[word] || ''}`;
+
+      const allClues = buildAllClues(acrossRenderText, downRenderText);
+      const cluesResult = calculateAllCluesHeight(allClues, gridEndY);
 
       // Puzzle page
       pdf.setFontSize(18);
       pdf.text(filename, pageWidth / 2, 15, { align: 'center' });
       pdf.addImage(emptyImgData, 'PNG', imgX, 25, imgWidth, imgHeight);
 
-      let yPos = 35 + imgHeight;
-
-      if (acrossWords?.length) {
-        yPos = renderClueSection({
-          title: 'Across',
-          items: acrossWords,
-          startY: yPos,
-          renderText: ({ number, word }) => `${number}. ${clues.across[word] || ''}`
-        });
-      }
-
-      yPos += 6;
-
-      if (downWords?.length) {
-        yPos = renderClueSection({
-          title: 'Down',
-          items: downWords,
-          startY: yPos,
-          renderText: ({ number, word }) => `${number}. ${clues.down[word] || ''}`
-        });
+      if (cluesResult.fits) {
+        // Render clues on same page as grid
+        renderAllClues(allClues, gridEndY);
+      } else {
+        // Render clues on separate page
+        pdf.addPage();
+        pdf.setFontSize(14);
+        pdf.text('Clues', pageWidth / 2, 15, { align: 'center' });
+        renderAllClues(allClues, PAGE_MARGIN_Y + 5);
       }
 
       // Answer Key page
@@ -336,29 +373,25 @@ function ExportPanel({
       pdf.text(`${filename} - Answer Key`, pageWidth / 2, 15, { align: 'center' });
       pdf.addImage(filledImgData, 'PNG', imgX, 25, imgWidth, imgHeight);
 
-      yPos = 35 + imgHeight;
+      const answerAcrossRenderText = ({ number, word }) => `${number}. ${getDisplayName(word)}`;
+      const answerDownRenderText = ({ number, word }) => `${number}. ${getDisplayName(word)}`;
 
-      if (acrossWords?.length) {
-        yPos = renderClueSection({
-          title: 'Across',
-          items: acrossWords,
-          startY: yPos,
-          renderText: ({ number, word }) => `${number}. ${getDisplayName(word)}`
-        });
+      const answerAllClues = buildAllClues(answerAcrossRenderText, answerDownRenderText);
+      const answerCluesResult = calculateAllCluesHeight(answerAllClues, gridEndY);
+
+      if (answerCluesResult.fits) {
+        renderAllClues(answerAllClues, gridEndY);
+      } else {
+        pdf.addPage();
+        pdf.setFontSize(14);
+        pdf.text('Answer Key', pageWidth / 2, 15, { align: 'center' });
+        renderAllClues(answerAllClues, PAGE_MARGIN_Y + 5);
       }
 
-      yPos += 6;
-
-      if (downWords?.length) {
-        yPos = renderClueSection({
-          title: 'Down',
-          items: downWords,
-          startY: yPos,
-          renderText: ({ number, word }) => `${number}. ${getDisplayName(word)}`
-        });
-      }
-
-      pdf.save(`${filename}.pdf`);
+      // Open preview in new tab instead of direct download
+      const pdfBlob = pdf.output('blob');
+      const pdfUrl = URL.createObjectURL(pdfBlob);
+      window.open(pdfUrl, '_blank');
     } catch (err) {
       alert('Failed to export PDF: ' + err.message);
     }
