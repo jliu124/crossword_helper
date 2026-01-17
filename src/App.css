@@ -233,6 +233,31 @@ main {
   max-width: 600px;
 }
 
+.suggestions-direction {
+  margin-bottom: 15px;
+}
+
+.suggestions-direction:last-child {
+  margin-bottom: 0;
+}
+
+.suggestions-pattern-group {
+  margin-bottom: 10px;
+  padding-left: 10px;
+  border-left: 2px solid #dee2e6;
+}
+
+.suggestions-pattern-group:last-child {
+  margin-bottom: 0;
+}
+
+.pattern-label {
+  font-family: monospace;
+  font-size: 0.9rem;
+  color: #495057;
+  margin-bottom: 6px;
+}
+
 .suggestions-header {
   font-size: 0.9rem;
   margin-bottom: 10px;

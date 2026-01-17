@@ -71,11 +71,20 @@ function App() {
   };
 
   // Handle cell change (manual editing)
-  const handleCellChange = (row, col, letter) => {
+  // Can accept a single cell (row, col, letter) or multiple cells (array of {row, col, letter})
+  const handleCellChange = (rowOrChanges, col, letter) => {
+    let changes;
+    if (Array.isArray(rowOrChanges)) {
+      changes = rowOrChanges;
+    } else {
+      changes = [{ row: rowOrChanges, col, letter }];
+    }
+
     const newGrid = grid.map((r, rowIndex) =>
       r.map((cell, colIndex) => {
-        if (rowIndex === row && colIndex === col) {
-          return letter;
+        const change = changes.find(c => c.row === rowIndex && c.col === colIndex);
+        if (change) {
+          return change.letter;
         }
         return cell;
       })
