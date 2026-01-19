@@ -368,11 +368,19 @@ const CrosswordGrid = forwardRef(function CrosswordGrid(
 
     if (e.key === 'Backspace' || e.key === 'Delete') {
       e.preventDefault();
-      // Clear all selected cells (both regular and pencil)
       selectedCells.forEach((key) => {
         const [row, col] = key.split('-').map(Number);
-        onCellChange?.(row, col, null);
-        onPencilChange?.(row, col, null);
+        const currentPencil = pencilMarks[key] || '';
+
+        if (pencilMode && currentPencil.length > 0) {
+          // In pencil mode, remove last letter one at a time
+          const newMarks = currentPencil.slice(0, -1);
+          onPencilChange?.(row, col, newMarks || null);
+        } else {
+          // In regular mode or no pencil marks, clear everything
+          onCellChange?.(row, col, null);
+          onPencilChange?.(row, col, null);
+        }
       });
     } else if (e.key === 'Escape') {
       setSelectedCells(new Set());
