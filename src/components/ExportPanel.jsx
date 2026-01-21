@@ -246,16 +246,26 @@ function ExportPanel({
       const lineHeight = 4;
       const titleLineHeight = 5;
 
-      // Build combined clue items for both across and down
+      // Build combined clue items for both across and down (filter duplicates)
       const buildAllClues = (acrossRenderText, downRenderText) => {
         const allItems = [];
-        if (acrossWords?.length) {
+
+        // Filter out duplicate words, keeping the first occurrence
+        const uniqueAcross = acrossWords?.filter((item, index, self) =>
+          index === self.findIndex(w => w.word === item.word)
+        ) || [];
+
+        const uniqueDown = downWords?.filter((item, index, self) =>
+          index === self.findIndex(w => w.word === item.word)
+        ) || [];
+
+        if (uniqueAcross.length) {
           allItems.push({ type: 'title', text: 'Across' });
-          acrossWords.forEach(item => allItems.push({ type: 'clue', text: acrossRenderText(item) }));
+          uniqueAcross.forEach(item => allItems.push({ type: 'clue', text: acrossRenderText(item) }));
         }
-        if (downWords?.length) {
+        if (uniqueDown.length) {
           allItems.push({ type: 'title', text: 'Down' });
-          downWords.forEach(item => allItems.push({ type: 'clue', text: downRenderText(item) }));
+          uniqueDown.forEach(item => allItems.push({ type: 'clue', text: downRenderText(item) }));
         }
         return allItems;
       };

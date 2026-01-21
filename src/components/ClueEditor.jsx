@@ -9,7 +9,16 @@ function ClueEditor({ acrossWords, downWords, clues, displayNames, onClueChange,
   // Get display name (with spaces) or fall back to the word itself
   const getDisplayName = (word) => displayNames?.[word] || word;
 
-  if (!acrossWords?.length && !downWords?.length) {
+  // Filter out duplicate words, keeping the first occurrence
+  const uniqueAcrossWords = acrossWords?.filter((item, index, self) =>
+    index === self.findIndex(w => w.word === item.word)
+  ) || [];
+
+  const uniqueDownWords = downWords?.filter((item, index, self) =>
+    index === self.findIndex(w => w.word === item.word)
+  ) || [];
+
+  if (!uniqueAcrossWords.length && !uniqueDownWords.length) {
     return null;
   }
 
@@ -17,7 +26,7 @@ function ClueEditor({ acrossWords, downWords, clues, displayNames, onClueChange,
     <div className="clue-editor">
       <div className="clue-section">
         <h3>Across</h3>
-        {acrossWords.map(({ number, word }) => (
+        {uniqueAcrossWords.map(({ number, word }) => (
           <div key={`across-${word}`} className="clue-row">
             <span className="clue-number">{number}.</span>
             <input
@@ -39,7 +48,7 @@ function ClueEditor({ acrossWords, downWords, clues, displayNames, onClueChange,
 
       <div className="clue-section">
         <h3>Down</h3>
-        {downWords.map(({ number, word }) => (
+        {uniqueDownWords.map(({ number, word }) => (
           <div key={`down-${word}`} className="clue-row">
             <span className="clue-number">{number}.</span>
             <input

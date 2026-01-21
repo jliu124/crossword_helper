@@ -1,4 +1,4 @@
-import { useState, useRef } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import WordInput from './components/WordInput';
 import GridSettings from './components/GridSettings';
 import CrosswordGrid from './components/CrosswordGrid';
@@ -33,6 +33,32 @@ function App() {
 
   // Ref for grid export
   const gridRef = useRef(null);
+
+  // Clean up clues when words are deleted from the grid
+  useEffect(() => {
+    const currentAcrossWords = new Set(acrossWords.map(w => w.word));
+    const currentDownWords = new Set(downWords.map(w => w.word));
+
+    setClues(prev => {
+      const newAcross = {};
+      const newDown = {};
+
+      // Only keep clues for words that still exist
+      Object.keys(prev.across).forEach(word => {
+        if (currentAcrossWords.has(word)) {
+          newAcross[word] = prev.across[word];
+        }
+      });
+
+      Object.keys(prev.down).forEach(word => {
+        if (currentDownWords.has(word)) {
+          newDown[word] = prev.down[word];
+        }
+      });
+
+      return { across: newAcross, down: newDown };
+    });
+  }, [acrossWords, downWords]);
 
   // Generate crossword
   const handleGenerate = (inputWords, inputDisplayNames) => {
