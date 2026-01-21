@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react';
 
 /**
  * WordInput Component
@@ -8,6 +8,25 @@ import { useState } from 'react';
 function WordInput({ onGenerate, disabled }) {
   const [text, setText] = useState('');
   const [error, setError] = useState('');
+
+  // Check for duplicates in real-time as user types
+  const duplicates = useMemo(() => {
+    const rawLines = text.split('\n')
+      .map(line => line.trim().toUpperCase().replace(/\s+/g, ''))
+      .filter(line => line.length > 0);
+
+    const seen = new Set();
+    const dupes = new Set();
+
+    for (const word of rawLines) {
+      if (seen.has(word)) {
+        dupes.add(word);
+      }
+      seen.add(word);
+    }
+
+    return Array.from(dupes);
+  }, [text]);
 
   const validateAndParse = () => {
     const rawLines = text.split('\n')
@@ -65,6 +84,11 @@ function WordInput({ onGenerate, disabled }) {
         rows={10}
         disabled={disabled}
       />
+      {duplicates.length > 0 && (
+        <p className="error">
+          Duplicate word{duplicates.length > 1 ? 's' : ''} detected: {duplicates.join(', ')}
+        </p>
+      )}
       {error && <p className="error">{error}</p>}
       <button onClick={handleGenerate} disabled={disabled || text.trim().length === 0}>
         Generate Crossword

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, useMemo } from 'react';
 import WordInput from './components/WordInput';
 import GridSettings from './components/GridSettings';
 import CrosswordGrid from './components/CrosswordGrid';
@@ -33,6 +33,26 @@ function App() {
 
   // Ref for grid export
   const gridRef = useRef(null);
+
+  // Check for duplicate words in current crossword
+  const duplicateWords = useMemo(() => {
+    const allWords = [
+      ...acrossWords.map(w => w.word),
+      ...downWords.map(w => w.word)
+    ];
+
+    const seen = new Set();
+    const dupes = new Set();
+
+    for (const word of allWords) {
+      if (seen.has(word)) {
+        dupes.add(word);
+      }
+      seen.add(word);
+    }
+
+    return Array.from(dupes);
+  }, [acrossWords, downWords]);
 
   // Clean up clues when words are deleted from the grid
   useEffect(() => {
@@ -349,6 +369,13 @@ function App() {
             <div className="warning">
               <strong>Warning:</strong> The following words could not be placed:{' '}
               {unplacedWords.join(', ')}
+            </div>
+          )}
+
+          {duplicateWords.length > 0 && (
+            <div className="warning">
+              <strong>Duplicate words detected:</strong>{' '}
+              {duplicateWords.join(', ')}
             </div>
           )}
 
