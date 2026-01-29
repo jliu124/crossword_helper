@@ -224,14 +224,20 @@ function ExportPanel({
       const pdf = new jsPDF('p', 'mm', 'a4');
       const pageWidth = pdf.internal.pageSize.getWidth();
 
-      const maxWidth = pageWidth - 40;
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const maxWidth = pageWidth - 20; // Smaller margins for larger grid
+      const maxHeight = pageHeight - 40; // Leave room for title
       const aspect = emptyCanvas.width / emptyCanvas.height;
+
       let imgWidth = maxWidth;
       let imgHeight = imgWidth / aspect;
-      if (imgHeight > 120) {
-        imgHeight = 120;
+
+      // Scale down if too tall
+      if (imgHeight > maxHeight) {
+        imgHeight = maxHeight;
         imgWidth = imgHeight * aspect;
       }
+
       const imgX = (pageWidth - imgWidth) / 2;
 
       const PAGE_MARGIN_X = 15;
