@@ -252,28 +252,31 @@ function ExportPanel({
       const lineHeight = 4;
       const titleLineHeight = 5;
 
-      // Build combined clue items for both across and down (filter duplicates)
+      // Filter out duplicate words, keeping the first occurrence
+      const uniqueAcross = acrossWords?.filter((item, index, self) =>
+        index === self.findIndex(w => w.word === item.word)
+      ) || [];
+
+      const uniqueDown = downWords?.filter((item, index, self) =>
+        index === self.findIndex(w => w.word === item.word)
+      ) || [];
+
+      // Build clue items for a section
+      const buildClueItems = (words, title, renderText) => {
+        const items = [];
+        if (words.length) {
+          items.push({ type: 'title', text: title });
+          words.forEach(item => items.push({ type: 'clue', text: renderText(item) }));
+        }
+        return items;
+      };
+
+      // Build combined clue items for both across and down
       const buildAllClues = (acrossRenderText, downRenderText) => {
-        const allItems = [];
-
-        // Filter out duplicate words, keeping the first occurrence
-        const uniqueAcross = acrossWords?.filter((item, index, self) =>
-          index === self.findIndex(w => w.word === item.word)
-        ) || [];
-
-        const uniqueDown = downWords?.filter((item, index, self) =>
-          index === self.findIndex(w => w.word === item.word)
-        ) || [];
-
-        if (uniqueAcross.length) {
-          allItems.push({ type: 'title', text: 'Across' });
-          uniqueAcross.forEach(item => allItems.push({ type: 'clue', text: acrossRenderText(item) }));
-        }
-        if (uniqueDown.length) {
-          allItems.push({ type: 'title', text: 'Down' });
-          uniqueDown.forEach(item => allItems.push({ type: 'clue', text: downRenderText(item) }));
-        }
-        return allItems;
+        return [
+          ...buildClueItems(uniqueAcross, 'Across', acrossRenderText),
+          ...buildClueItems(uniqueDown, 'Down', downRenderText)
+        ];
       };
 
       // Get height of an item
@@ -364,7 +367,9 @@ function ExportPanel({
       const acrossRenderText = ({ number, word }) => `${number}. ${clues.across[word] || ''}`;
       const downRenderText = ({ number, word }) => `${number}. ${clues.down[word] || ''}`;
 
-      const allClues = buildAllClues(acrossRenderText, downRenderText);
+      const acrossClues = buildClueItems(uniqueAcross, 'Across', acrossRenderText);
+      const downClues = buildClueItems(uniqueDown, 'Down', downRenderText);
+      const allClues = [...acrossClues, ...downClues];
       const cluesResult = calculateAllCluesHeight(allClues, gridEndY);
 
       // Puzzle page
@@ -373,14 +378,19 @@ function ExportPanel({
       pdf.addImage(emptyImgData, 'PNG', imgX, 25, imgWidth, imgHeight);
 
       if (cluesResult.fits) {
-        // Render clues on same page as grid
+        // Render all clues on same page as grid
         renderAllClues(allClues, gridEndY);
       } else {
-        // Render clues on separate page
+        // Render Across and Down on separate pages
         pdf.addPage();
         pdf.setFontSize(14);
-        pdf.text('Clues', pageWidth / 2, 15, { align: 'center' });
-        renderAllClues(allClues, PAGE_MARGIN_Y + 5);
+        pdf.text('Across', pageWidth / 2, 15, { align: 'center' });
+        renderAllClues(acrossClues.slice(1), PAGE_MARGIN_Y + 5); // Skip title since it's in header
+
+        pdf.addPage();
+        pdf.setFontSize(14);
+        pdf.text('Down', pageWidth / 2, 15, { align: 'center' });
+        renderAllClues(downClues.slice(1), PAGE_MARGIN_Y + 5); // Skip title since it's in header
       }
 
       // Answer Key page
@@ -392,16 +402,24 @@ function ExportPanel({
       const answerAcrossRenderText = ({ number, word }) => `${number}. ${getDisplayName(word)}`;
       const answerDownRenderText = ({ number, word }) => `${number}. ${getDisplayName(word)}`;
 
-      const answerAllClues = buildAllClues(answerAcrossRenderText, answerDownRenderText);
+      const answerAcrossClues = buildClueItems(uniqueAcross, 'Across', answerAcrossRenderText);
+      const answerDownClues = buildClueItems(uniqueDown, 'Down', answerDownRenderText);
+      const answerAllClues = [...answerAcrossClues, ...answerDownClues];
       const answerCluesResult = calculateAllCluesHeight(answerAllClues, gridEndY);
 
       if (answerCluesResult.fits) {
         renderAllClues(answerAllClues, gridEndY);
       } else {
+        // Render Across and Down answers on separate pages
         pdf.addPage();
         pdf.setFontSize(14);
-        pdf.text('Answer Key', pageWidth / 2, 15, { align: 'center' });
-        renderAllClues(answerAllClues, PAGE_MARGIN_Y + 5);
+        pdf.text('Across Answers', pageWidth / 2, 15, { align: 'center' });
+        renderAllClues(answerAcrossClues.slice(1), PAGE_MARGIN_Y + 5);
+
+        pdf.addPage();
+        pdf.setFontSize(14);
+        pdf.text('Down Answers', pageWidth / 2, 15, { align: 'center' });
+        renderAllClues(answerDownClues.slice(1), PAGE_MARGIN_Y + 5);
       }
 
       // Open preview in new tab instead of direct download
